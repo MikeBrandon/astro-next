@@ -11,6 +11,7 @@ interface PlanetData {
   size: number; // Size in Earth radii
   color: number;
   inclination?: number; // Orbital inclination in degrees
+  textureMap: string;
 }
 
 interface PlanetPosition {
@@ -50,15 +51,15 @@ interface PlanetDistance {
 
 // Planet sizes in Earth radii and orbital inclinations in degrees
 const PLANETS: PlanetData[] = [
-  { id: 'sun', name: 'Sun', size: 109 / 50, color: 0xffff00, inclination: 0 },
-  { id: 'mercury', name: 'Mercury', size: 0.383, color: 0x808080, inclination: 7.0 },
-  { id: 'venus', name: 'Venus', size: 0.949, color: 0xffd700, inclination: 3.4 },
-  { id: 'earth', name: 'Earth', size: 1.0, color: 0x0077be, inclination: 0.0 },
-  { id: 'mars', name: 'Mars', size: 0.532, color: 0xff4500, inclination: 1.9 },
-  { id: 'jupiter', name: 'Jupiter', size: 11.209, color: 0xffa500, inclination: 1.3 },
-  { id: 'saturn', name: 'Saturn', size: 9.449, color: 0xffd700, inclination: 2.5 },
-  { id: 'uranus', name: 'Uranus', size: 4.007, color: 0x40e0d0, inclination: 0.8 },
-  { id: 'neptune', name: 'Neptune', size: 3.883, color: 0x0000ff, inclination: 1.8 },
+  { id: 'sun', name: 'Sun', size: 109 / 50, color: 0xffff00, inclination: 0, textureMap: '/textures/2k_sun.jpg' },
+  { id: 'mercury', name: 'Mercury', size: 0.383, color: 0x808080, inclination: 7.0, textureMap: '/textures/2k_mercury.jpg' },
+  { id: 'venus', name: 'Venus', size: 0.949, color: 0xffd700, inclination: 3.4, textureMap: '/textures/2k_venus.jpg' },
+  { id: 'earth', name: 'Earth', size: 1.0, color: 0x0077be, inclination: 0.0, textureMap: '/textures/2k_earth.jpg' },
+  { id: 'mars', name: 'Mars', size: 0.532, color: 0xff4500, inclination: 1.9, textureMap: '/textures/2k_mars.jpg' },
+  { id: 'jupiter', name: 'Jupiter', size: 11.209, color: 0xffa500, inclination: 1.3, textureMap: '/textures/2k_jupiter.jpg' },
+  { id: 'saturn', name: 'Saturn', size: 9.449, color: 0xffd700, inclination: 2.5, textureMap: '/textures/2k_saturn.jpg' },
+  { id: 'uranus', name: 'Uranus', size: 4.007, color: 0x40e0d0, inclination: 0.8, textureMap: '/textures/2k_uranus.jpg' },
+  { id: 'neptune', name: 'Neptune', size: 3.883, color: 0x0000ff, inclination: 1.8, textureMap: '/textures/2k_neptune.jpg' },
 ];
 
 const SCALE_FACTOR = 10; // Scale factor for converting AU to scene units
@@ -135,14 +136,23 @@ const SolarSystem = () => {
     draggableCube.position.set(20, 20, 20);
     scene.add(draggableCube);
 
+    // Texture loader
+    const textureLoader = new THREE.TextureLoader();
+
     // Create sun first
-    const sunGeometry = new THREE.SphereGeometry(PLANETS[0].size * SIZE_SCALE, 32, 32);
+    const sunGeometry = new THREE.SphereGeometry(PLANETS[0].size * SIZE_SCALE, 64, 64);
+    const sunTexture = textureLoader.load(PLANETS[0].textureMap);
     const sunMaterial = new THREE.MeshBasicMaterial({
-      color: PLANETS[0].color,
+      map: sunTexture,
       emissive: PLANETS[0].color,
+      emissiveIntensity: 0.5
     });
     const sun = new THREE.Mesh(sunGeometry, sunMaterial);
     scene.add(sun);
+
+    // Add point light at sun's position
+    const sunLight = new THREE.PointLight(0xffffff, 2, 300);
+    sun.add(sunLight);
 
     // Create planets and add them to the scene
     const planetMeshes = new Map();
@@ -150,10 +160,12 @@ const SolarSystem = () => {
 
     // Create planets (excluding sun which is already created)
     PLANETS.slice(1).forEach(planet => {
-      const geometry = new THREE.SphereGeometry(planet.size * SIZE_SCALE, 32, 32);
-      const material = new THREE.MeshPhongMaterial({
-        color: planet.color,
-        shininess: 5,
+      const geometry = new THREE.SphereGeometry(planet.size * SIZE_SCALE, 64, 64);
+      const texture = textureLoader.load(planet.textureMap);
+      const material = new THREE.MeshStandardMaterial({
+        map: texture,
+        metalness: 0.1,
+        roughness: 0.8,
       });
       const mesh = new THREE.Mesh(geometry, material);
 
@@ -166,7 +178,7 @@ const SolarSystem = () => {
           coords.z * SCALE_FACTOR
         );
 
-        // Create orbit line
+        // Create orbit line with gradient
         const distance = Math.sqrt(
           Math.pow(coords.x * SCALE_FACTOR, 2) + 
           Math.pow(coords.y * SCALE_FACTOR, 2) + 
@@ -235,6 +247,18 @@ const SolarSystem = () => {
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
       controls.update();
+      
+      // Rotate sun slowly
+      sun.rotation.y += 0.001;
+      
+      // Rotate planets
+      PLANETS.slice(1).forEach(planet => {
+        const mesh = planetMeshes.get(planet.id);
+        if (mesh) {
+          mesh.rotation.y += 0.005;
+        }
+      });
+      
       renderer.render(scene, camera);
       
       // Update planet label positions and distances
@@ -315,41 +339,52 @@ const SolarSystem = () => {
   };
 
   return (
-    <div className="relative w-full h-screen">
+    <div className="relative w-full h-screen bg-black">
       <div className="w-full h-screen" ref={mountRef} />
-      <div className="absolute top-4 right-4 bg-black bg-opacity-50 p-4 rounded">
+      
+      {/* Time selector */}
+      <div className="absolute top-6 right-6">
         <input
           type="datetime-local"
-          value={timestamp?.slice(0, 16) || ''} // Format for datetime-local input
+          value={timestamp?.slice(0, 16) || ''}
           onChange={(e) => setTimestamp(new Date(e.target.value).toISOString())}
-          className="bg-gray-800 text-white p-2 rounded"
+          className="bg-[#1c1c1e] text-white border border-[#2c2c2e] rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white/20"
         />
       </div>
+
+      {/* Loading state */}
       {loading && (
-        <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white p-2 rounded">
+        <div className="absolute top-6 left-6 bg-[#1c1c1e]/90 backdrop-blur-md text-white/90 px-4 py-2 rounded-xl">
           Loading planet positions...
         </div>
       )}
+
+      {/* Error state */}
       {error && (
-        <div className="absolute top-4 left-4 bg-red-500 bg-opacity-50 text-white p-2 rounded">
+        <div className="absolute top-6 left-6 bg-red-500/90 backdrop-blur-md text-white px-4 py-2 rounded-xl">
           {error}
         </div>
       )}
-      <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white p-4 rounded max-h-96 overflow-y-auto">
-        <h3 className="font-bold mb-2">Distances (AU)</h3>
-        <ul>
+
+      {/* Distances panel */}
+      <div className="absolute top-6 left-6 bg-[#1c1c1e]/80 backdrop-blur-md text-white/90 p-6 rounded-2xl max-h-96 overflow-y-auto">
+        <h3 className="font-medium text-lg mb-4">Distances (AU)</h3>
+        <ul className="space-y-2">
           {distances.map(planet => (
-            <li key={planet.id} className="mb-1">
-              {planet.name}: {planet.distance}
+            <li key={planet.id} className="flex items-center space-x-2">
+              <span>{planet.name}:</span>
+              <span className="font-light">{planet.distance}</span>
             </li>
           ))}
         </ul>
       </div>
+
+      {/* Planet labels */}
       {distances.map(planet => (
         planetPositions[planet.id] && (
           <div
             key={planet.id}
-            className="absolute text-white bg-black bg-opacity-50 px-2 py-1 rounded transform -translate-x-1/2 -translate-y-[calc(50%+24px)] cursor-pointer hover:bg-opacity-75"
+            className="absolute text-white/90 bg-[#1c1c1e]/80 backdrop-blur-md px-3 py-1.5 rounded-full transform -translate-x-1/2 -translate-y-[calc(50%+24px)] cursor-pointer transition-colors hover:bg-[#2c2c2e]/80"
             style={{
               left: planetPositions[planet.id].x,
               top: planetPositions[planet.id].y
@@ -360,10 +395,21 @@ const SolarSystem = () => {
           </div>
         )
       ))}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white p-4 rounded text-center">
-        {timestamp?.slice(0, 19)}Z | {distances.length > 1 && `${distances.filter(p => p.id !== 'sun')[0].name}: ${distances.filter(p => p.id !== 'sun')[0].distance} AU | ${distances.filter(p => p.id !== 'sun')[1].name}: ${distances.filter(p => p.id !== 'sun')[1].distance} AU | `}
-        {distances.find(p => p.id === 'sun')?.name}: {distances.find(p => p.id === 'sun')?.distance} AU
 
+      {/* Bottom info bar */}
+      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-[#1c1c1e]/80 backdrop-blur-md text-white/90 px-6 py-3 rounded-2xl text-center font-light">
+        <span className="font-medium">{timestamp?.slice(0, 19)}Z</span>
+        {distances.length > 1 && (
+          <span className="mx-4">
+            {distances.filter(p => p.id !== 'sun')[0].name}: {distances.filter(p => p.id !== 'sun')[0].distance} AU | 
+            {distances.filter(p => p.id !== 'sun')[1].name}: {distances.filter(p => p.id !== 'sun')[1].distance} AU
+          </span>
+        )}
+        {distances.find(p => p.id === 'sun') && (
+          <span>
+            {distances.find(p => p.id === 'sun')?.name}: {distances.find(p => p.id === 'sun')?.distance} AU
+          </span>
+        )}
       </div>
     </div>
   );
