@@ -64,7 +64,9 @@ const SolarSystem = () => {
   useEffect(() => {
     const fetchPlanetData = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/coordinates`);
+        const now = new Date();
+        const timestamp = now.toISOString();
+        const response = await fetch(`http://localhost:5000/coordinates?timestamp=${timestamp}`);
         const data: ApiResponse = await response.json();
         setPlanetData(data);
         setLoading(false);
