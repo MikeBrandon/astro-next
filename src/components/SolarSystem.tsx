@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { DragControls } from 'three/examples/jsm/controls/DragControls';
 
 interface PlanetData {
   id: string;
@@ -35,6 +36,11 @@ interface ApiResponse {
   status: string;
 }
 
+interface CameraState {
+  position: THREE.Vector3;
+  target: THREE.Vector3;
+}
+
 // Planet sizes in Earth radii and orbital inclinations in degrees
 const PLANETS: PlanetData[] = [
   { id: 'sun', name: 'Sun', size: 109 / 50, color: 0xffff00, inclination: 0 },
@@ -55,17 +61,27 @@ const ORBIT_INCLINATION = (Math.PI / 2) + (23 * Math.PI / 180); // 113 degrees (
 const SolarSystem = () => {
   const mountRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const dragControlsRef = useRef<DragControls | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [planetPositions, setPlanetPositions] = useState<PlanetPositions>({});
   const [planetData, setPlanetData] = useState<ApiResponse | null>(null);
+  const [timestamp, setTimestamp] = useState(() => new Date().toISOString());
+  const [cameraState, setCameraState] = useState<CameraState | null>(null);
 
-  // Fetch planet data only once on mount
+  // Fetch planet data whenever timestamp changes
   useEffect(() => {
     const fetchPlanetData = async () => {
       try {
-        const now = new Date();
-        const timestamp = now.toISOString();
+        // Store current camera state before updating
+        if (controlsRef.current) {
+          setCameraState({
+            position: controlsRef.current.object.position.clone(),
+            target: controlsRef.current.target.clone()
+          });
+        }
+
+        setLoading(true);
         const response = await fetch(`http://localhost:5000/coordinates?timestamp=${timestamp}`);
         const data: ApiResponse = await response.json();
         setPlanetData(data);
@@ -77,7 +93,7 @@ const SolarSystem = () => {
     };
 
     fetchPlanetData();
-  }, []); // Empty dependency array means run once on mount
+  }, [timestamp]); // Re-run when timestamp changes
 
   // Setup three.js scene after planetData is loaded
   useEffect(() => {
@@ -95,6 +111,17 @@ const SolarSystem = () => {
     const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x080820, 1);
     const pointLight = new THREE.PointLight(0xffffff, 2, 300);
     scene.add(ambientLight, hemisphereLight, pointLight);
+
+    // Create draggable object
+    const draggableGeometry = new THREE.BoxGeometry(2, 2, 2);
+    const draggableMaterial = new THREE.MeshPhongMaterial({
+      color: 0xff00ff,
+      transparent: true,
+      opacity: 0.8
+    });
+    const draggableCube = new THREE.Mesh(draggableGeometry, draggableMaterial);
+    draggableCube.position.set(20, 20, 20);
+    scene.add(draggableCube);
 
     // Create sun first
     const sunGeometry = new THREE.SphereGeometry(PLANETS[0].size * SIZE_SCALE, 32, 32);
@@ -161,15 +188,34 @@ const SolarSystem = () => {
     });
 
     // Camera position
-    camera.position.z = 100;
-    camera.position.y = 50;
-    camera.lookAt(0, 0, 0);
+    if (cameraState) {
+      camera.position.copy(cameraState.position);
+    } else {
+      camera.position.z = 100;
+      camera.position.y = 50;
+      camera.lookAt(0, 0, 0);
+    }
 
     // OrbitControls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
+    if (cameraState) {
+      controls.target.copy(cameraState.target);
+    }
     controlsRef.current = controls;
+
+    // DragControls for the draggable cube
+    const dragControls = new DragControls([draggableCube], camera, renderer.domElement);
+    dragControlsRef.current = dragControls;
+
+    // Disable orbit controls while dragging
+    dragControls.addEventListener('dragstart', () => {
+      controls.enabled = false;
+    });
+    dragControls.addEventListener('dragend', () => {
+      controls.enabled = true;
+    });
 
     // Animation loop
     let animationFrameId: number;
@@ -216,7 +262,7 @@ const SolarSystem = () => {
       scene.clear();
       renderer.dispose();
     };
-  }, [planetData]); // Re-run if planetData changes
+  }, [planetData, cameraState]); // Re-run if planetData or cameraState changes
 
   const focusOnPlanet = (planetId: string) => {
     if (!planetData?.data[planetId] || !controlsRef.current) return;
@@ -241,6 +287,14 @@ const SolarSystem = () => {
   return (
     <div className="relative w-full h-screen">
       <div className="w-full h-screen" ref={mountRef} />
+      <div className="absolute top-4 right-4 bg-black bg-opacity-50 p-4 rounded">
+        <input
+          type="datetime-local"
+          value={timestamp.slice(0, 16)} // Format for datetime-local input
+          onChange={(e) => setTimestamp(new Date(e.target.value).toISOString())}
+          className="bg-gray-800 text-white p-2 rounded"
+        />
+      </div>
       {loading && (
         <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white p-2 rounded">
           Loading planet positions...
