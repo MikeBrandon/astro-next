@@ -4,23 +4,80 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
-const PLANETS = [
-  { id: 'mercury', name: 'Mercury', size: 0.8, color: 0x808080 },
-  { id: 'venus', name: 'Venus', size: 1.2, color: 0xffd700 },
-  { id: 'mars', name: 'Mars', size: 0.9, color: 0xff4500 },
-  { id: 'jupiter', name: 'Jupiter', size: 2.8, color: 0xffa500 },
-  { id: 'saturn', name: 'Saturn', size: 2.4, color: 0xffd700 },
-  { id: 'uranus', name: 'Uranus', size: 1.8, color: 0x40e0d0 },
-  { id: 'neptune', name: 'Neptune', size: 1.8, color: 0x0000ff },
+interface PlanetData {
+  id: string;
+  name: string;
+  size: number; // Size in Earth radii
+  color: number;
+}
+
+interface PlanetPosition {
+  x: number;
+  y: number;
+}
+
+interface PlanetPositions {
+  [key: string]: PlanetPosition;
+}
+
+interface CoordinateData {
+  timestamp: string;
+  x: number; // In astronomical units
+  y: number;
+  z: number;
+}
+
+interface ApiResponse {
+  data: {
+    [key: string]: CoordinateData;
+  };
+  status: string;
+}
+
+// Planet sizes in Earth radii
+const PLANETS: PlanetData[] = [
+  { id: 'sun', name: 'Sun', size: 109 / 50, color: 0xffff00 },
+  { id: 'mercury', name: 'Mercury', size: 0.383, color: 0x808080 },
+  { id: 'venus', name: 'Venus', size: 0.949, color: 0xffd700 },
+  { id: 'earth', name: 'Earth', size: 1.0, color: 0x0077be },
+  { id: 'mars', name: 'Mars', size: 0.532, color: 0xff4500 },
+  { id: 'jupiter', name: 'Jupiter', size: 11.209, color: 0xffa500 },
+  { id: 'saturn', name: 'Saturn', size: 9.449, color: 0xffd700 },
+  { id: 'uranus', name: 'Uranus', size: 4.007, color: 0x40e0d0 },
+  { id: 'neptune', name: 'Neptune', size: 3.883, color: 0x0000ff },
 ];
 
-const SolarSystem = () => {
-  const mountRef = useRef(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [planetPositions, setPlanetPositions] = useState({});
+const SCALE_FACTOR = 10; // Scale factor for converting AU to scene units
+const SIZE_SCALE = 0.5; // Scale factor for planet sizes to keep them visible but not too large
 
+const SolarSystem = () => {
+  const mountRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [planetPositions, setPlanetPositions] = useState<PlanetPositions>({});
+  const [planetData, setPlanetData] = useState<ApiResponse | null>(null);
+
+  // Fetch planet data only once on mount
   useEffect(() => {
+    const fetchPlanetData = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/coordinates`);
+        const data: ApiResponse = await response.json();
+        setPlanetData(data);
+        setLoading(false);
+      } catch (error) {
+        setError('Failed to fetch planet data');
+        setLoading(false);
+      }
+    };
+
+    fetchPlanetData();
+  }, []); // Empty dependency array means run once on mount
+
+  // Setup three.js scene after planetData is loaded
+  useEffect(() => {
+    if (!mountRef.current) return;
+
     // Scene setup
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -29,127 +86,54 @@ const SolarSystem = () => {
     mountRef.current.appendChild(renderer.domElement);
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0x404040, 2); // Increased intensity
-    const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x080820, 1); // Added hemisphere light
+    const ambientLight = new THREE.AmbientLight(0x404040, 2);
+    const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x080820, 1);
     const pointLight = new THREE.PointLight(0xffffff, 2, 300);
     scene.add(ambientLight, hemisphereLight, pointLight);
 
-    // Sun
-    const sunGeometry = new THREE.SphereGeometry(5, 32, 32);
+    // Create sun first
+    const sunGeometry = new THREE.SphereGeometry(PLANETS[0].size * SIZE_SCALE, 32, 32);
     const sunMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffff00,
-      emissive: 0xffff00,
+      color: PLANETS[0].color,
+      emissive: PLANETS[0].color,
     });
     const sun = new THREE.Mesh(sunGeometry, sunMaterial);
     scene.add(sun);
 
     // Create planets and add them to the scene
     const planetMeshes = new Map();
-    const planetOrbits = new Map();
+    planetMeshes.set('sun', sun);
 
-    PLANETS.forEach(planet => {
-      const geometry = new THREE.SphereGeometry(planet.size, 32, 32);
+    // Create planets (excluding sun which is already created)
+    PLANETS.slice(1).forEach(planet => {
+      const geometry = new THREE.SphereGeometry(planet.size * SIZE_SCALE, 32, 32);
       const material = new THREE.MeshPhongMaterial({
         color: planet.color,
         shininess: 5,
       });
       const mesh = new THREE.Mesh(geometry, material);
-      
-      // Create orbit
-      const orbit = new THREE.Object3D();
-      orbit.add(mesh);
-      scene.add(orbit);
-      
-      planetMeshes.set(planet.id, mesh);
-      planetOrbits.set(planet.id, orbit);
 
-      // Add orbit line
-      const orbitGeometry = new THREE.BufferGeometry();
-      const orbitMaterial = new THREE.LineBasicMaterial({ color: 0x444444 });
-      const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
-      scene.add(orbitLine);
+      // Position planet based on API data if available
+      if (planetData?.data[planet.id]) {
+        const coords = planetData.data[planet.id];
+        mesh.position.set(
+          coords.x * SCALE_FACTOR,
+          coords.y * SCALE_FACTOR,
+          coords.z * SCALE_FACTOR
+        );
+      } else {
+        // Fallback to default position
+        mesh.position.set(10, 0, 0);
+      }
+
+      scene.add(mesh);
+      planetMeshes.set(planet.id, mesh);
     });
 
-    const today = new Date().toISOString().split('T')[0];
-    const API_KEY = "ead8f70e-66a1-4e9a-b6e6-aee38f6246a7";
-    const API_SECRET =
-      "973bdf221dd4fbf4976e2f3f63d286fbc7f37194a876a191428799d8eea6b04151444456460ee7707bfb17ca0b52f1e2f00f116bde107072f2dd9a4b67c3135e6b6bf2baf629257ca06cab264fe67d6d2cf020dcb20c53b7387b9c20e12042f49a4ccf7503a74c1ca98ffbba0514c7aa";
-    // Function to fetch planet position
-    const fetchPlanetPosition = async (planetId: string) => {
-      try {
-        const response = await fetch(
-          `https://api.astronomyapi.com/api/v2/bodies/positions/${planetId}?latitude=0&longitude=0&elevation=0&from_date=${today}&to_date=${today}&time=00:00:00`,
-          {
-            headers: {
-              Authorization: 'Basic ' + Buffer.from(`${API_KEY}:${API_SECRET}`).toString('base64'),
-            },
-          }
-        );
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ${planetId} data`);
-        }
-        
-        const data = await response.json();
-        return data;
-      } catch (error) {
-        console.error(`Error fetching ${planetId} data:`, error);
-      }
-    };
-
-    // Update all planet positions
-    const updatePlanetPositions = async () => {
-      try {
-        setLoading(true);
-        const positions = await Promise.all(
-          PLANETS.map(async planet => {
-            const data = await fetchPlanetPosition(planet.id);
-            return {
-              id: planet.id,
-              data: data
-            };
-          })
-        );
-
-        const newPositions = {};
-        positions.forEach(({ id, data }) => {
-          const planetData = data.data.table.rows[0].cells[0];
-          const distance = parseFloat(planetData.distance.fromEarth.au);
-          const altitude = parseFloat(planetData.position.horizontal.altitude.degrees);
-          const azimuth = parseFloat(planetData.position.horizontal.azimuth.degrees);
-
-          const phi = THREE.MathUtils.degToRad(90 - altitude);
-          const theta = THREE.MathUtils.degToRad(azimuth);
-
-          const mesh = planetMeshes.get(id);
-          mesh.position.setFromSpherical(
-            new THREE.Spherical(distance * 10, phi, theta)
-          );
-
-          // Store screen position for labels
-          const vector = new THREE.Vector3();
-          vector.setFromSpherical(new THREE.Spherical(distance * 10, phi, theta));
-          vector.project(camera);
-          
-          newPositions[id] = {
-            x: (vector.x * 0.5 + 0.5) * window.innerWidth,
-            y: (-vector.y * 0.5 + 0.5) * window.innerHeight
-          };
-        });
-
-        setPlanetPositions(newPositions);
-        setLoading(false);
-      } catch (error) {
-        setError('Failed to fetch planet positions');
-        setLoading(false);
-      }
-    };
-
-    // Initial position update
-    updatePlanetPositions();
-
     // Camera position
-    camera.position.z = 50;
+    camera.position.z = 100;
+    camera.position.y = 50;
+    camera.lookAt(0, 0, 0);
 
     // OrbitControls
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -157,9 +141,10 @@ const SolarSystem = () => {
     controls.dampingFactor = 0.05;
 
     // Animation loop
+    let animationFrameId: number;
+    
     const animate = () => {
-      requestAnimationFrame(animate);
-      sun.rotation.y += 0.005;
+      animationFrameId = requestAnimationFrame(animate);
       controls.update();
       renderer.render(scene, camera);
       
@@ -194,9 +179,13 @@ const SolarSystem = () => {
     // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationFrameId);
       mountRef.current?.removeChild(renderer.domElement);
+      // Clean up three.js resources
+      scene.clear();
+      renderer.dispose();
     };
-  }, []);
+  }, [planetData]); // Only re-run if planetData changes
 
   return (
     <div className="relative w-full h-screen">
@@ -215,7 +204,7 @@ const SolarSystem = () => {
         planetPositions[planet.id] && (
           <div
             key={planet.id}
-            className="absolute text-white bg-black bg-opacity-50 px-2 py-1 rounded transform -translate-x-1/2 -translate-y-1/2"
+            className="absolute text-white bg-black bg-opacity-50 px-2 py-1 rounded transform -translate-x-1/2 -translate-y-[calc(50%+24px)]"
             style={{
               left: planetPositions[planet.id].x,
               top: planetPositions[planet.id].y
