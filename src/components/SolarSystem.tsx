@@ -357,7 +357,7 @@ const SolarSystem = () => {
         )
       ))}
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white p-4 rounded text-center">
-        {timestamp.slice(0, 19)}Z | {distances.length > 1 && `${distances[0].name}: ${distances[0].distance} AU | ${distances[1].name}: ${distances[1].distance} AU | `}
+        {timestamp.slice(0, 19)}Z | {distances.length > 1 && `${distances.filter(p => p.id !== 'sun')[0].name}: ${distances.filter(p => p.id !== 'sun')[0].distance} AU | ${distances.filter(p => p.id !== 'sun')[1].name}: ${distances.filter(p => p.id !== 'sun')[1].distance} AU | `}
         {distances.find(p => p.id === 'sun')?.name}: {distances.find(p => p.id === 'sun')?.distance} AU
       </div>
     </div>
