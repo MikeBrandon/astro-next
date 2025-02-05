@@ -73,9 +73,13 @@ const SolarSystem = () => {
   const [error, setError] = useState<string | null>(null);
   const [planetPositions, setPlanetPositions] = useState<PlanetPositions>({});
   const [planetData, setPlanetData] = useState<ApiResponse | null>(null);
-  const [timestamp, setTimestamp] = useState(() => new Date().toISOString());
+  const [timestamp, setTimestamp] = useState<string | null>(null);
   const [cameraState, setCameraState] = useState<CameraState | null>(null);
   const [distances, setDistances] = useState<PlanetDistance[]>([]);
+
+  useEffect(() => {
+    setTimestamp(new Date().toISOString());
+  }, []);
 
   // Fetch planet data whenever timestamp changes
   useEffect(() => {
@@ -90,7 +94,7 @@ const SolarSystem = () => {
         }
 
         setLoading(true);
-        const response = await fetch(`http://localhost:5000/coordinates?timestamp=${timestamp}`);
+        const response = await fetch(`http://localhost:5000/coordinates?timestamp=${timestamp || new Date().toISOString()}`);
         const data: ApiResponse = await response.json();
         setPlanetData(data);
         setLoading(false);
@@ -316,7 +320,7 @@ const SolarSystem = () => {
       <div className="absolute top-4 right-4 bg-black bg-opacity-50 p-4 rounded">
         <input
           type="datetime-local"
-          value={timestamp.slice(0, 16)} // Format for datetime-local input
+          value={timestamp?.slice(0, 16) || ''} // Format for datetime-local input
           onChange={(e) => setTimestamp(new Date(e.target.value).toISOString())}
           className="bg-gray-800 text-white p-2 rounded"
         />
@@ -357,8 +361,9 @@ const SolarSystem = () => {
         )
       ))}
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white p-4 rounded text-center">
-        {timestamp.slice(0, 19)}Z | {distances.length > 1 && `${distances.filter(p => p.id !== 'sun')[0].name}: ${distances.filter(p => p.id !== 'sun')[0].distance} AU | ${distances.filter(p => p.id !== 'sun')[1].name}: ${distances.filter(p => p.id !== 'sun')[1].distance} AU | `}
+        {timestamp?.slice(0, 19)}Z | {distances.length > 1 && `${distances.filter(p => p.id !== 'sun')[0].name}: ${distances.filter(p => p.id !== 'sun')[0].distance} AU | ${distances.filter(p => p.id !== 'sun')[1].name}: ${distances.filter(p => p.id !== 'sun')[1].distance} AU | `}
         {distances.find(p => p.id === 'sun')?.name}: {distances.find(p => p.id === 'sun')?.distance} AU
+
       </div>
     </div>
   );
