@@ -54,6 +54,7 @@ const ORBIT_INCLINATION = (Math.PI / 2) + (23 * Math.PI / 180); // 113 degrees (
 
 const SolarSystem = () => {
   const mountRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [planetPositions, setPlanetPositions] = useState<PlanetPositions>({});
@@ -166,6 +167,7 @@ const SolarSystem = () => {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
+    controlsRef.current = controls;
 
     // Animation loop
     let animationFrameId: number;
@@ -214,6 +216,26 @@ const SolarSystem = () => {
     };
   }, [planetData]); // Re-run if planetData changes
 
+  const focusOnPlanet = (planetId: string) => {
+    if (!planetData?.data[planetId] || !controlsRef.current) return;
+
+    const coords = planetData.data[planetId];
+    const targetPosition = new THREE.Vector3(
+      coords.x * SCALE_FACTOR,
+      coords.y * SCALE_FACTOR,
+      coords.z * SCALE_FACTOR
+    );
+
+    // Calculate camera position to be slightly offset from the planet
+    const offset = new THREE.Vector3(15, 10, 15);
+    const cameraTargetPosition = targetPosition.clone().add(offset);
+
+    // Smoothly move the camera
+    const controls = controlsRef.current;
+    controls.target.copy(targetPosition);
+    controls.object.position.copy(cameraTargetPosition);
+  };
+
   return (
     <div className="relative w-full h-screen">
       <div className="w-full h-screen" ref={mountRef} />
@@ -231,11 +253,12 @@ const SolarSystem = () => {
         planetPositions[planet.id] && (
           <div
             key={planet.id}
-            className="absolute text-white bg-black bg-opacity-50 px-2 py-1 rounded transform -translate-x-1/2 -translate-y-[calc(50%+24px)]"
+            className="absolute text-white bg-black bg-opacity-50 px-2 py-1 rounded transform -translate-x-1/2 -translate-y-[calc(50%+24px)] cursor-pointer hover:bg-opacity-75"
             style={{
               left: planetPositions[planet.id].x,
               top: planetPositions[planet.id].y
             }}
+            onClick={() => focusOnPlanet(planet.id)}
           >
             {planet.name}
           </div>
