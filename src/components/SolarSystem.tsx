@@ -77,6 +77,7 @@ const SolarSystem = () => {
   const [timestamp, setTimestamp] = useState<string | null>(null);
   const [cameraState, setCameraState] = useState<CameraState | null>(null);
   const [distances, setDistances] = useState<PlanetDistance[]>([]);
+  const [focusedPlanet, setFocusedPlanet] = useState<string | null>(null);
 
   useEffect(() => {
     setTimestamp(new Date().toISOString());
@@ -328,14 +329,43 @@ const SolarSystem = () => {
       coords.z * SCALE_FACTOR
     );
 
-    // Calculate camera position to be slightly offset from the planet
-    const offset = new THREE.Vector3(15, 10, 15);
+    // Calculate camera position to be very close to the planet
+    // Get planet size to determine appropriate distance
+    const planet = PLANETS.find(p => p.id === planetId);
+    const planetSize = (planet?.size || 1) * SIZE_SCALE;
+    const distance = planetSize * 3; // Position camera 3x the planet's radius away
+
+    // Calculate offset based on planet size
+    const offset = new THREE.Vector3(distance, distance/2, distance);
     const cameraTargetPosition = targetPosition.clone().add(offset);
 
-    // Smoothly move the camera
+    // Smoothly animate the camera to the new position
     const controls = controlsRef.current;
-    controls.target.copy(targetPosition);
-    controls.object.position.copy(cameraTargetPosition);
+    const startPosition = controls.object.position.clone();
+    const startTarget = controls.target.clone();
+    const duration = 1000; // Animation duration in ms
+    const startTime = Date.now();
+
+    const animateCamera = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Use easing function for smooth animation
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+      controls.object.position.lerpVectors(startPosition, cameraTargetPosition, easeProgress);
+      controls.target.lerpVectors(startTarget, targetPosition, easeProgress);
+      controls.update();
+
+      if (progress < 1) {
+        requestAnimationFrame(animateCamera);
+      }
+    };
+
+    animateCamera();
+    
+    // Set focused planet
+    setFocusedPlanet(planetId);
   };
 
   return (
@@ -354,14 +384,14 @@ const SolarSystem = () => {
 
       {/* Loading state */}
       {loading && (
-        <div className="absolute top-6 left-6 bg-[#1c1c1e]/90 backdrop-blur-md text-white/90 px-4 py-2 rounded-xl">
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 bg-[#1c1c1e]/90 backdrop-blur-md text-white/90 px-4 py-2 rounded-xl">
           Loading planet positions...
         </div>
       )}
 
       {/* Error state */}
       {error && (
-        <div className="absolute top-6 left-6 bg-red-500/90 backdrop-blur-md text-white px-4 py-2 rounded-xl">
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 bg-red-500/90 backdrop-blur-md text-white px-4 py-2 rounded-xl">
           {error}
         </div>
       )}
@@ -384,14 +414,25 @@ const SolarSystem = () => {
         planetPositions[planet.id] && (
           <div
             key={planet.id}
-            className="absolute text-white/90 bg-[#1c1c1e]/80 backdrop-blur-md px-3 py-1.5 rounded-full transform -translate-x-1/2 -translate-y-[calc(50%+24px)] cursor-pointer transition-colors hover:bg-[#2c2c2e]/80"
+            className={`absolute text-white/90 bg-[#1c1c1e]/80 backdrop-blur-md px-3 py-1.5 ${focusedPlanet === planet.id ? 'rounded-md' : 'rounded-full'} transform -translate-x-1/2 -translate-y-[calc(50%+24px)] cursor-pointer transition-colors hover:bg-[#2c2c2e]/80`}
             style={{
               left: planetPositions[planet.id].x,
               top: planetPositions[planet.id].y
             }}
             onClick={() => focusOnPlanet(planet.id)}
           >
-            {planet.name}
+            <div>{planet.name}</div>
+            {focusedPlanet === planet.id && (
+              <div className="text-xs opacity-75 mt-1">
+                {timestamp?.slice(0, 19)}Z
+                <br />
+                {distances.filter(p => p.id !== planet.id && p.id !== 'sun').slice(0, 2).map(p => (
+                  `${p.name}: ${p.distance} AU`
+                )).join(' | ')}
+                <br />
+                Sun: {distances.find(p => p.id === 'sun')?.distance} AU
+              </div>
+            )}
           </div>
         )
       ))}
