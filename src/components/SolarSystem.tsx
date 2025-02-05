@@ -41,6 +41,13 @@ interface CameraState {
   target: THREE.Vector3;
 }
 
+interface PlanetDistance {
+  id: string;
+  name: string;
+  distance: number;
+  position: PlanetPosition;
+}
+
 // Planet sizes in Earth radii and orbital inclinations in degrees
 const PLANETS: PlanetData[] = [
   { id: 'sun', name: 'Sun', size: 109 / 50, color: 0xffff00, inclination: 0 },
@@ -68,6 +75,7 @@ const SolarSystem = () => {
   const [planetData, setPlanetData] = useState<ApiResponse | null>(null);
   const [timestamp, setTimestamp] = useState(() => new Date().toISOString());
   const [cameraState, setCameraState] = useState<CameraState | null>(null);
+  const [distances, setDistances] = useState<PlanetDistance[]>([]);
 
   // Fetch planet data whenever timestamp changes
   useEffect(() => {
@@ -225,7 +233,8 @@ const SolarSystem = () => {
       controls.update();
       renderer.render(scene, camera);
       
-      // Update planet label positions
+      // Update planet label positions and distances
+      const newDistances: PlanetDistance[] = [];
       PLANETS.forEach(planet => {
         const mesh = planetMeshes.get(planet.id);
         const vector = new THREE.Vector3();
@@ -235,11 +244,28 @@ const SolarSystem = () => {
         const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
         const y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
         
-        setPlanetPositions(prev => ({
-          ...prev,
-          [planet.id]: { x, y }
-        }));
+        const position = { x, y };
+        
+        // Calculate distance from draggable cube
+        const distance = draggableCube.position.distanceTo(mesh.position);
+        newDistances.push({
+          id: planet.id,
+          name: planet.name,
+          distance: Number((distance / SCALE_FACTOR).toFixed(2)), // Convert back to AU and round to 2 decimals
+          position
+        });
       });
+      
+      // Sort distances from nearest to farthest
+      newDistances.sort((a, b) => a.distance - b.distance);
+      setDistances(newDistances);
+      
+      // Update planet positions based on sorted distances
+      const newPlanetPositions: PlanetPositions = {};
+      newDistances.forEach(planet => {
+        newPlanetPositions[planet.id] = planet.position;
+      });
+      setPlanetPositions(newPlanetPositions);
     };
 
     animate();
@@ -305,7 +331,17 @@ const SolarSystem = () => {
           {error}
         </div>
       )}
-      {PLANETS.map(planet => (
+      <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white p-4 rounded max-h-96 overflow-y-auto">
+        <h3 className="font-bold mb-2">Distances (AU)</h3>
+        <ul>
+          {distances.map(planet => (
+            <li key={planet.id} className="mb-1">
+              {planet.name}: {planet.distance}
+            </li>
+          ))}
+        </ul>
+      </div>
+      {distances.map(planet => (
         planetPositions[planet.id] && (
           <div
             key={planet.id}
@@ -320,6 +356,10 @@ const SolarSystem = () => {
           </div>
         )
       ))}
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white p-4 rounded text-center">
+        {timestamp.slice(0, 19)}Z | {distances.length > 1 && `${distances[0].name}: ${distances[0].distance} AU | ${distances[1].name}: ${distances[1].distance} AU | `}
+        {distances.find(p => p.id === 'sun')?.name}: {distances.find(p => p.id === 'sun')?.distance} AU
+      </div>
     </div>
   );
 };
