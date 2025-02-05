@@ -78,6 +78,7 @@ const SolarSystem = () => {
   const [cameraState, setCameraState] = useState<CameraState | null>(null);
   const [distances, setDistances] = useState<PlanetDistance[]>([]);
   const [focusedPlanet, setFocusedPlanet] = useState<string | null>(null);
+  const [loadTextures, setLoadTextures] = useState(false);
 
   useEffect(() => {
     setTimestamp(new Date().toISOString());
@@ -142,12 +143,17 @@ const SolarSystem = () => {
 
     // Create sun first
     const sunGeometry = new THREE.SphereGeometry(PLANETS[0].size * SIZE_SCALE, 64, 64);
-    const sunTexture = textureLoader.load(PLANETS[0].textureMap);
-    const sunMaterial = new THREE.MeshBasicMaterial({
-      map: sunTexture,
-      emissive: PLANETS[0].color,
-      emissiveIntensity: 0.5
-    });
+    const sunMaterial = loadTextures ? 
+      new THREE.MeshBasicMaterial({
+        map: textureLoader.load(PLANETS[0].textureMap),
+        emissive: PLANETS[0].color,
+        emissiveIntensity: 0.5
+      }) :
+      new THREE.MeshBasicMaterial({
+        color: PLANETS[0].color,
+        emissive: PLANETS[0].color,
+        emissiveIntensity: 0.5
+      });
     const sun = new THREE.Mesh(sunGeometry, sunMaterial);
     scene.add(sun);
 
@@ -162,12 +168,17 @@ const SolarSystem = () => {
     // Create planets (excluding sun which is already created)
     PLANETS.slice(1).forEach(planet => {
       const geometry = new THREE.SphereGeometry(planet.size * SIZE_SCALE, 64, 64);
-      const texture = textureLoader.load(planet.textureMap);
-      const material = new THREE.MeshStandardMaterial({
-        map: texture,
-        metalness: 0.1,
-        roughness: 0.8,
-      });
+      const material = loadTextures ?
+        new THREE.MeshStandardMaterial({
+          map: textureLoader.load(planet.textureMap),
+          metalness: 0.1,
+          roughness: 0.8,
+        }) :
+        new THREE.MeshStandardMaterial({
+          color: planet.color,
+          metalness: 0.1,
+          roughness: 0.8,
+        });
       const mesh = new THREE.Mesh(geometry, material);
 
       // Position planet based on API data if available
@@ -317,7 +328,7 @@ const SolarSystem = () => {
       scene.clear();
       renderer.dispose();
     };
-  }, [planetData, cameraState]); // Re-run if planetData or cameraState changes
+  }, [planetData, cameraState, loadTextures]); // Re-run if planetData, cameraState, or loadTextures changes
 
   const focusOnPlanet = (planetId: string) => {
     if (!planetData?.data[planetId] || !controlsRef.current) return;
@@ -372,14 +383,20 @@ const SolarSystem = () => {
     <div className="relative w-full h-screen bg-black">
       <div className="w-full h-screen" ref={mountRef} />
       
-      {/* Time selector */}
-      <div className="absolute top-6 right-6">
+      {/* Time selector and texture toggle */}
+      <div className="absolute top-6 right-6 flex flex-col gap-2">
         <input
           type="datetime-local"
           value={timestamp?.slice(0, 16) || ''}
           onChange={(e) => setTimestamp(new Date(e.target.value).toISOString())}
           className="bg-[#1c1c1e] text-white border border-[#2c2c2e] rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white/20"
         />
+        <button
+          onClick={() => setLoadTextures(!loadTextures)}
+          className={`bg-[#1c1c1e] text-white border border-[#2c2c2e] rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white/20 ${loadTextures ? 'bg-[#2c2c2e]' : ''}`}
+        >
+          {loadTextures ? 'Disable Textures' : 'Enable Textures'}
+        </button>
       </div>
 
       {/* Loading state */}
