@@ -9,6 +9,7 @@ interface PlanetData {
   name: string;
   size: number; // Size in Earth radii
   color: number;
+  inclination?: number; // Orbital inclination in degrees
 }
 
 interface PlanetPosition {
@@ -34,21 +35,22 @@ interface ApiResponse {
   status: string;
 }
 
-// Planet sizes in Earth radii
+// Planet sizes in Earth radii and orbital inclinations in degrees
 const PLANETS: PlanetData[] = [
-  { id: 'sun', name: 'Sun', size: 109 / 50, color: 0xffff00 },
-  { id: 'mercury', name: 'Mercury', size: 0.383, color: 0x808080 },
-  { id: 'venus', name: 'Venus', size: 0.949, color: 0xffd700 },
-  { id: 'earth', name: 'Earth', size: 1.0, color: 0x0077be },
-  { id: 'mars', name: 'Mars', size: 0.532, color: 0xff4500 },
-  { id: 'jupiter', name: 'Jupiter', size: 11.209, color: 0xffa500 },
-  { id: 'saturn', name: 'Saturn', size: 9.449, color: 0xffd700 },
-  { id: 'uranus', name: 'Uranus', size: 4.007, color: 0x40e0d0 },
-  { id: 'neptune', name: 'Neptune', size: 3.883, color: 0x0000ff },
+  { id: 'sun', name: 'Sun', size: 109 / 50, color: 0xffff00, inclination: 0 },
+  { id: 'mercury', name: 'Mercury', size: 0.383, color: 0x808080, inclination: 7.0 },
+  { id: 'venus', name: 'Venus', size: 0.949, color: 0xffd700, inclination: 3.4 },
+  { id: 'earth', name: 'Earth', size: 1.0, color: 0x0077be, inclination: 0.0 },
+  { id: 'mars', name: 'Mars', size: 0.532, color: 0xff4500, inclination: 1.9 },
+  { id: 'jupiter', name: 'Jupiter', size: 11.209, color: 0xffa500, inclination: 1.3 },
+  { id: 'saturn', name: 'Saturn', size: 9.449, color: 0xffd700, inclination: 2.5 },
+  { id: 'uranus', name: 'Uranus', size: 4.007, color: 0x40e0d0, inclination: 0.8 },
+  { id: 'neptune', name: 'Neptune', size: 3.883, color: 0x0000ff, inclination: 1.8 },
 ];
 
 const SCALE_FACTOR = 10; // Scale factor for converting AU to scene units
 const SIZE_SCALE = 0.5; // Scale factor for planet sizes to keep them visible but not too large
+const ORBIT_INCLINATION = (Math.PI / 2) + (23 * Math.PI / 180); // 113 degrees (90 + 23)
 
 const SolarSystem = () => {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -121,6 +123,31 @@ const SolarSystem = () => {
           coords.y * SCALE_FACTOR,
           coords.z * SCALE_FACTOR
         );
+
+        // Create orbit line
+        const distance = Math.sqrt(
+          Math.pow(coords.x * SCALE_FACTOR, 2) + 
+          Math.pow(coords.y * SCALE_FACTOR, 2) + 
+          Math.pow(coords.z * SCALE_FACTOR, 2)
+        );
+        const orbitGeometry = new THREE.RingGeometry(distance - 0.1, distance + 0.1, 128);
+        const orbitMaterial = new THREE.MeshBasicMaterial({ 
+          color: 0x666666,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.3
+        });
+        const orbit = new THREE.Mesh(orbitGeometry, orbitMaterial);
+        
+        // Apply global inclination plus planet-specific inclination
+        const totalInclination = ORBIT_INCLINATION + ((planet.inclination || 0) * Math.PI / 180);
+        orbit.rotation.x = Math.PI / 2 + totalInclination;
+        
+        // Also rotate the planet to match total inclination
+        mesh.rotation.x = totalInclination;
+        
+        scene.add(orbit);
+
       } else {
         // Fallback to default position
         mesh.position.set(10, 0, 0);
@@ -185,7 +212,7 @@ const SolarSystem = () => {
       scene.clear();
       renderer.dispose();
     };
-  }, [planetData]); // Only re-run if planetData changes
+  }, [planetData]); // Re-run if planetData changes
 
   return (
     <div className="relative w-full h-screen">
